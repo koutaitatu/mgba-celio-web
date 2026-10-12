@@ -107,6 +107,7 @@
       choosePixelTransfer();
       cheats = []; renderCheats(); configureCheatFormats();
             {
+      loadCheats();
         try {
           const stored = await readBrowserSave(romKey);
           if (serial !== loadSerial) return;
@@ -438,6 +439,34 @@
     }
   },true);
   addEventListener('keydown', e => { if (document.body.classList.contains('clean-view') && e.code==='Escape') document.body.classList.remove('clean-view'); });
+    function saveCheats() {
+    if (!romKey) return;
+    try {
+      localStorage.setItem('mgba-cheats:' + romKey, JSON.stringify(cheats));
+    } catch (_) {}
+  }  function loadCheats() {
+    if (!romKey) return;
+    try {
+      const saved = JSON.parse(localStorage.getItem('mgba-cheats:' + romKey) || '[]');
+      const encoder = new TextEncoder();
+      saved.forEach(cheat => {
+        if (!cheat || !cheat.name || !cheat.codes) return;
+        const result = upload(encoder.encode(cheat.name+'\0'), p =>
+          upload(encoder.encode(cheat.codes+'\0'), q =>
+            m._web_cheat_add(p, q, Number(cheat.format) || 0)));
+        if (result < 0) return;
+        const restored = {name:cheat.name, codes:cheat.codes,
+          format:Number(cheat.format) || 0, enabled:true};
+        const index = cheats.length;
+        cheats.push(restored);
+        if (cheat.enabled === false) {
+          m._web_cheat_enable(index, false);
+          restored.enabled = false;
+        }
+      });
+    } catch (_) {}
+    renderCheats();
+  }
   function configureCheatFormats() {
     const formats = m._web_platform()===0 ? [[0,'自動判定'],[1,'CodeBreaker'],[2,'GameShark'],[3,'Action Replay'],[4,'VBA（アドレス:値）']] : [[0,'自動判定'],[1,'GameShark'],[2,'Game Genie'],[3,'VBA（アドレス:値）']];
     $('cheat-format').replaceChildren(...formats.map(([value,label])=>new Option(label,value)));
@@ -449,8 +478,8 @@
       const row = document.createElement('div'), label = document.createElement('label'), toggle = document.createElement('input'), remove = document.createElement('button');
       row.className = 'cheat-item'; toggle.type = 'checkbox'; toggle.checked = cheat.enabled;
       label.append(toggle,document.createTextNode(' '+cheat.name));
-      toggle.onchange = () => { if (m._web_cheat_enable(index, toggle.checked)) cheat.enabled = toggle.checked; };
-      remove.textContent = '削除'; remove.onclick = () => { if (m._web_cheat_remove(index)) { cheats.splice(index,1); renderCheats(); } };
+      toggle.onchange = () => { if (m._web_cheat_enable(index, toggle.checked)) { cheat.enabled = toggle.checked; saveCheats(); } };
+      remove.textContent = ‘削除’; remove.onclick = () => { if (m._web_cheat_remove(index)) { cheats.splice(index,1); renderCheats(); saveCheats(); } };
       row.append(label,remove); $('cheat-list').append(row);
     });
   }
@@ -461,7 +490,7 @@
     const encoder = new TextEncoder();
     const result = upload(encoder.encode(title+'\0'), p => upload(encoder.encode(codes+'\0'), q => m._web_cheat_add(p,q,+$('cheat-format').value)));
     if (result<0) { $('cheat-status').textContent = result===-1000 ? '追加できませんでした。入力サイズや登録数を確認してください。' : (-result)+'行目を読み込めません。コードと形式を確認してください。'; return; }
-    cheats.push({name:title,enabled:true}); renderCheats(); $('cheat-code').value = ''; $('cheat-name').value = ''; $('cheat-status').textContent = '追加しました。チェックで有効・無効を切り替えられます。';
+   cheats.push({name:title,codes,format:+$('cheat-format').value,enabled:true});  renderCheats(); saveCheats();$('cheat-code').value = ''; $('cheat-name').value = ''; $('cheat-status').textContent = '追加しました。チェックで有効・無効を切り替えられます。';
   };
   const localSaves = new LocalSaveStore();
   let quickState = null, quickStates = [], quickSlot = 1, quickBusy = false, quickMessageTimer;
